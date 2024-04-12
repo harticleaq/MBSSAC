@@ -17,13 +17,13 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--marlalgo",
+        "--marl_algo",
         type=str,
         default="ossmc",
         help="Algorithm name.",
     )
     parser.add_argument(
-        "--worldmodel",
+        "--world_model",
         type=str,
         default="dreamer",
         help="Algorithm name.",
@@ -56,10 +56,11 @@ def main():
     unparsed_dict = {k: v for k, v in zip(keys, values)}
     args = vars(args)  # convert to dict
    
-    marl_args, env_args = get_defaults_yaml_args(args["marlalgo"], args["env"])
+    marl_args, env_args = get_defaults_yaml_args(args["marl_algo"], args["env"], args["world_model"])
     update_args(unparsed_dict, marl_args, env_args)  # update args from command line
+    
     # start training
-    from ossmc.runners.runner import Runner
+    from runners.runner import Runner
 
     runner = Runner(args, marl_args, env_args)
     runner.run()
