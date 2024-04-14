@@ -5,7 +5,7 @@ import setproctitle
 
 from ossmc.agent import Agent
 from utils.configs_setup import get_task_name, init_dir, save_config
-from utils.env_setup import make_train_env, get_num_agents
+from utils.env_setup import make_train_env, get_num_agents, set_seed
 from common.off_policy_buffer_fp import OffPolicyBufferFP
 from dreamer.models import DreamModel
 from utils.trans_setup import _t2n
@@ -28,17 +28,24 @@ class Runner:
             str(args["marl_algo"]) + "-" + str(args["world_model"]) + "-" + str(args["env"]) 
         )
 
+
         # Attribute regard of agent, env.
-        self.num_agents = get_num_agents(args["env"], env_args)
-
-
-        # Instance models, env.
         self.envs = make_train_env()
         self.eval_envs = make_train_env()
+        self.num_agents = get_num_agents(args["env"], env_args)
+        self.agent_deaths = np.zeros(
+            (self.marl_args["train"]["n_rollout_threads"], self.num_agents, 1)
+        )
+
+        # Instance models.
 
         self.agent = Agent()
         self.buffer = OffPolicyBufferFP()
         self.world_model = DreamModel()
+
+
+
+
 
     def sample_actions(self, available_actions=None):
         """Sample random actions for warmup.
@@ -70,6 +77,7 @@ class Runner:
         pass
 
     def run(self):
+        set_seed(self.marl_args["seed"])
         self.train_episode_rewards = np.zeros(
             self.algo_args["train"]["n_rollout_threads"]
         )
@@ -118,14 +126,9 @@ class Runner:
             available_actions = new_available_actions
 
             if step % self.marl_args["train"]["train_interval"] == 0:
+                for _ in range(self.world_model_args.model_epochs):
+                    self.train_world_model()
                 for _ in range(update_num):
-                    for i in range(self.config.MODEL_EPOCHS):
-                        samples = self.replay_buffer.sample(self.config.MODEL_BATCH_SIZE)
-                        self.train_model(samples)
-
-                    for i in range(self.config.EPOCHS):
-                        samples = self.replay_buffer.sample(self.config.BATCH_SIZE)
-                        self.train_agent(samples)
-
+                    self.train_agent()
 
 

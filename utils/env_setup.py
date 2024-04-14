@@ -1,5 +1,47 @@
+import random
+import numpy as np
+import os
+import torch
 
 from envs.env_wrappers import ShareDummyVecEnv, ShareSubprocVecEnv
+
+
+def check(value):
+    """Check if value is a numpy array, if so, convert it to a torch tensor."""
+    output = torch.from_numpy(value) if isinstance(value, np.ndarray) else value
+    return output
+
+
+def init_device(args):
+    """Init device.
+    Args:
+        args: (dict) arguments
+    Returns:
+        device: (torch.device) device
+    """
+    if args["cuda"] and torch.cuda.is_available():
+        print("choose to use gpu...")
+        device = torch.device("cuda:0")
+        if args["cuda_deterministic"]:
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
+    else:
+        print("choose to use cpu...")
+        device = torch.device("cpu")
+    torch.set_num_threads(args["torch_threads"])
+    return device
+
+
+def set_seed(args):
+    """Seed the program."""
+    if not args["seed_specify"]:
+        args["seed"] = np.random.randint(1000, 10000)
+    random.seed(args["seed"])
+    np.random.seed(args["seed"])
+    os.environ["PYTHONHASHSEED"] = str(args["seed"])
+    torch.manual_seed(args["seed"])
+    torch.cuda.manual_seed(args["seed"])
+    torch.cuda.manual_seed_all(args["seed"])
 
 
 def get_num_agents(env_name, env_args):
