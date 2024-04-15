@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from utils.env_setup import check, get_shape_from_obs_space
 from utils.discrete_setup import gumbel_softmax
-from ossmc.algorithms.networks import MLPBase
+from ossmc.algorithms.networks import MLPBase, ACTLayer
 
 class Actor(nn.Module):
     def __init__(self, args, obs_space, action_space, device=torch.device("cpu")):

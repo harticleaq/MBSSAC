@@ -6,11 +6,39 @@ import torch
 from envs.env_wrappers import ShareDummyVecEnv, ShareSubprocVecEnv
 
 
+def get_combined_dim(cent_obs_feature_dim, act_spaces):
+    """Get the combined dimension of central observation and individual actions."""
+    combined_dim = cent_obs_feature_dim
+    for space in act_spaces:
+        if space.__class__.__name__ == "Box":
+            combined_dim += space.shape[0]
+        elif space.__class__.__name__ == "Discrete":
+            combined_dim += space.n
+        else:
+            action_dims = space.nvec
+            for action_dim in action_dims:
+                combined_dim += action_dim
+    return combined_dim
+
 def check(value):
     """Check if value is a numpy array, if so, convert it to a torch tensor."""
     output = torch.from_numpy(value) if isinstance(value, np.ndarray) else value
     return output
 
+def get_shape_from_obs_space(obs_space):
+    """Get shape from observation space.
+    Args:
+        obs_space: (gym.spaces or list) observation space
+    Returns:
+        obs_shape: (tuple) observation shape
+    """
+    if obs_space.__class__.__name__ == "Box":
+        obs_shape = obs_space.shape
+    elif obs_space.__class__.__name__ == "list":
+        obs_shape = obs_space
+    else:
+        raise NotImplementedError
+    return obs_shape
 
 def init_device(args):
     """Init device.

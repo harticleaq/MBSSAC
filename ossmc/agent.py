@@ -1,5 +1,12 @@
+
+import torch
+import numpy as np
+
 from utils.env_setup import init_device, get_num_agents
 from common.valuenorm import ValueNorm
+from common.off_policy_buffer_fp import OffPolicyBufferFP
+from algorithms.ossac import OSSAC as Policy
+from algorithms.critic import SoftTwinContinuousQCritic as Critic
 
 class Agent:
     def __init__(self, envs, args, marl_args, env_args) -> None:
@@ -36,7 +43,53 @@ class Agent:
 
 
         self.actor = []
+        for agent_id in range(self.num_agents):
+            agent = Policy(
+                {**marl_args["model"], **marl_args["algo"]},
+                self.envs.observation_space[agent_id],
+                self.envs.action_space[agent_id],
+                device=self.device,
+            )
+            self.actor.append(agent)
         
 
+        self.critic = Critic(
+             {**marl_args["train"], **marl_args["model"], **marl_args["algo"]},
+                self.envs.share_observation_space[0],
+                self.envs.action_space,
+                self.num_agents,
+                self.state_type,
+                device=self.device,
+        )
 
-        
+
+        self.total_it = 0
+        if (
+            "auto_alpha" in self.marl_args["algo"].keys()
+            and self.marl_args["algo"]["auto_alpha"]
+        ):
+            self.target_entropy = []
+            for agent_id in range(self.num_agents):
+                 self.target_entropy.append(
+                        -0.98
+                        * np.log(1.0 / np.prod(self.envs.action_space[agent_id].shape))
+                    )  
+
+            self.log_alpha = []
+            self.alpha_optimizer = []
+            self.alpha = []
+            for agent_id in range(self.num_agents):
+                _log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+                self.log_alpha.append(_log_alpha)
+                self.alpha_optimizer.append(
+                    torch.optim.Adam(
+                        [_log_alpha], lr=self.marl_args["algo"]["alpha_lr"]
+                    )
+                )
+                self.alpha.append(torch.exp(_log_alpha.detach()))
+
+        elif "alpha" in self.marl_args["algo"].keys():
+            self.alpha = [self.marl_args["algo"]["alpha"]] * self.num_agents
+
+    def train(self):
+        self.total_it += 1
