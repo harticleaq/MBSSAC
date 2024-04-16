@@ -8,13 +8,26 @@ def _t2n(value):
     """Convert torch.Tensor to numpy.ndarray."""
     return value.detach().cpu().numpy()
 
+def stack_states(rssm_states: list, dim):
+    return reduce_states(rssm_states, dim, torch.stack)
+
+
+def cat_states(rssm_states: list, dim):
+    return reduce_states(rssm_states, dim, torch.cat)
+
+
+def reduce_states(rssm_states: list, dim, func):
+    return get_RSSMState("discrete")(*[func([getattr(state, key) for state in rssm_states], dim=dim)
+                       for key in rssm_states[0].__dict__.keys()])
+
+
 
 @dataclass
 class RSSMStateBase:
     stoch: torch.Tensor
     deter: torch.Tensor
 
-    def map(self, func, rssm_state_mode):
+    def map(self, func, rssm_state_mode="discrete"):
         RSSMState = get_RSSMState(rssm_state_mode)
         return RSSMState(**{key: func(val) for key, val in self.__dict__.items()})
 

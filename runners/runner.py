@@ -262,5 +262,14 @@ class Runner:
                     self.train_world_model()
                 for _ in range(update_num):
                     self.train_agent()
+    
+    def train_world_model(self):
+        data = self.buffer.sample()
+        for agent_id in range(self.num_agents):
+            self.agent.world_model[agent_id].train()
+            self.agent.world_model[agent_id].train_model(data)
+            self.agent.world_model[agent_id].eval()
 
+    def train_agent(self):
+        pass
 

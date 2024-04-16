@@ -3,8 +3,8 @@ attention_layers: 2
 hidden_size: 64
 model_hidden: 64
 embed_size: 64
-n_categoricals: 8
-n_classes: 8
+n_categoricals: 7
+n_classes: 7
 deterministic_size: 64
 stochastic_size: n_classes*n_categoricals
 feat_size: stochastic+deterministic
@@ -21,3 +21,6 @@ action_hidden: 64
 
 activation_func: relu
 action_type: discrete
+kl_balance: 0.2
+lr: 0.0002
+grad_clip: 100
