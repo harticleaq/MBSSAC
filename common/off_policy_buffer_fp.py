@@ -53,7 +53,6 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
         indice = torch.randperm(self.cur_size).numpy()[: self.batch_size]  # sample indice, shape: (batch_size, )
         
         
-        sp_messages = self.messages[indice]
         # get data at the beginning indice
         sp_share_obs = np.concatenate(
             self.share_obs[indice].transpose(1, 0, 2), axis=0
@@ -133,8 +132,7 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
                 sp_next_share_obs,
                 sp_next_obs,
                 sp_next_available_actions,
-                sp_gamma,
-                sp_messages
+                sp_gamma
             )
         else:
             return (

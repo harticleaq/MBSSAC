@@ -8,6 +8,7 @@ from common.off_policy_buffer_fp import OffPolicyBufferFP
 from ossmc.algorithms.ossac import OSSAC as Policy
 from ossmc.algorithms.critic import SoftTwinContinuousQCritic as Critic
 from dreamer.models.DreamModel import DreamerModel
+
 class Agent:
     def __init__(self, envs, args, marl_args, env_args, wm_args) -> None:
         self.args = args
@@ -48,7 +49,7 @@ class Agent:
         for agent_id in range(self.num_agents):
             agent = Policy(
                 {**marl_args["model"], **marl_args["algo"]},
-                self.envs.observation_space[agent_id],
+                self.wm_args["feat_size"],
                 self.envs.action_space[agent_id],
                 device=self.device,
             )
@@ -100,6 +101,7 @@ class Agent:
 
         elif "alpha" in self.marl_args["algo"].keys():
             self.alpha = [self.marl_args["algo"]["alpha"]] * self.num_agents
+
 
     def train(self):
         self.total_it += 1

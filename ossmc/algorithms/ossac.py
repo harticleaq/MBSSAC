@@ -8,7 +8,7 @@ from utils.discrete_setup import gumbel_softmax
 from ossmc.algorithms.networks import MLPBase, ACTLayer
 
 class Actor(nn.Module):
-    def __init__(self, args, obs_space, action_space, device=torch.device("cpu")):
+    def __init__(self, args, feat_size, action_space, device=torch.device("cpu")):
         super(Actor, self).__init__()
 
         self.hidden_sizes = args["hidden_sizes"]
@@ -17,9 +17,7 @@ class Actor(nn.Module):
         self.initialization_method = args["initialization_method"]
         self.tpdv = dict(dtype=torch.float32, device=device)
 
-        obs_shape = get_shape_from_obs_space(obs_space)
-
-        obs_dim = obs_shape[0] 
+        obs_dim = feat_size
         self.base = MLPBase(args, obs_dim)
         act_dim = self.hidden_sizes[-1]
         self.act = ACTLayer(
@@ -75,14 +73,14 @@ class Actor(nn.Module):
 
 
 class OSSAC:
-    def __init__(self, args, obs_space, act_space, device=torch.device("cpu")):
+    def __init__(self, args, feat_size, act_space, device=torch.device("cpu")):
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.polyak = args["polyak"]
         self.lr = args["lr"]
         self.device = device
         self.action_type = act_space.__class__.__name__
 
-        self.actor = Actor(args, obs_space, act_space, device)
+        self.actor = Actor(args, feat_size, act_space, device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
         self.turn_off_grad()
 

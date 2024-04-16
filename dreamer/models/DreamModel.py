@@ -4,7 +4,7 @@ import torch.nn as nn
 from dreamer.networks.dense import DenseBinaryModel, DenseModel
 from dreamer.networks.vae import Encoder, Decoder
 from dreamer.networks.rnns import RSSMRepresentation, RSSMTransition
-from utils.env_setup import get_shape_from_obs_space
+from utils.env_setup import get_shape_from_obs_space, check
 
 class DreamerModel(nn.Module):
     def __init__(self, obs_space, action_space, args, env_args, wm_args, device):
@@ -39,17 +39,19 @@ class DreamerModel(nn.Module):
             self.av_action = None
         self.q_features = DenseModel(self.hidden_size, self.pcont_hidden, 1, self.pcont_hidden)
         self.q_action = nn.Linear(self.pcont_hidden, self.action_size)
+        self.tpdv = dict(dtype=torch.float32, device=device)
         self.to(device)
 
     
     def forward(self, observations, prev_actions=None, prev_states=None, mask=None):
+        observations = check(observations).to(**self.tpdv)
         if prev_actions is None:
-            prev_actions = torch.zeros(observations.size(0), observations.size(1), self.action_size,
+            prev_actions = torch.zeros(observations.size(0), self.action_size,
                                        device=observations.device)
 
         if prev_states is None:
-            prev_states = self.representation.initial_state(prev_actions.size(0), observations.size(1),
+            prev_states = self.representation.initial_state(prev_actions.size(0),
                                                             device=observations.device)
-        obs_embeds = self.observation_encoder(observations)
+        obs_embeds = self.obs_encoder(observations)
         _, states = self.representation(obs_embeds, prev_actions, prev_states, mask)
-        
+        return states

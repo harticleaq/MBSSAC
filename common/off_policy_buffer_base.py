@@ -73,9 +73,6 @@ class OffPolicyBufferBase:
                         (self.buffer_size, act_spaces[agent_id].n), dtype=np.float32
                     )
                 )
-        self.messages = np.zeros(
-                        (self.buffer_size, num_agents, act_spaces[agent_id].n), dtype=np.float32
-                    )
             
     def insert(self, data):
         """Insert data into buffer.
@@ -105,14 +102,12 @@ class OffPolicyBufferBase:
             next_share_obs,
             next_obs,
             next_available_actions,
-            messages
         ) = data
         length = share_obs.shape[0]
         if self.idx + length <= self.buffer_size:  # no overflow
             s = self.idx
             e = self.idx + length
             self.share_obs[s:e] = share_obs.copy()
-            self.messages[s:e] = messages.copy()
             self.rewards[s:e] = reward.copy()
             self.dones[s:e] = done.copy()
             self.terms[s:e] = term.copy()
@@ -139,7 +134,6 @@ class OffPolicyBufferBase:
             s = self.idx
             e = self.buffer_size
             self.share_obs[s:e] = share_obs[0:len1].copy()
-            self.messages[s:e] = messages[0:len1].copy()
             self.rewards[s:e] = reward[0:len1].copy()
             self.dones[s:e] = done[0:len1].copy()
             self.terms[s:e] = term[0:len1].copy()
@@ -163,7 +157,6 @@ class OffPolicyBufferBase:
             s = 0
             e = len2
             self.share_obs[s:e] = share_obs[len1:length].copy()
-            self.messages[s:e] = messages[len1:length].copy()
             self.rewards[s:e] = reward[len1:length].copy()
             self.dones[s:e] = done[len1:length].copy()
             self.terms[s:e] = term[len1:length].copy()
