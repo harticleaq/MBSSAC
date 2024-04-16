@@ -1,13 +1,14 @@
 # Dream config
+attention_layers: 2
 hidden_size: 256
 model_hidden: 256
 embed_size: 256
 n_categoricals: 32
 n_classes: 32
-deterministic: 128
-stochastic: n_classes * n_categoricals
-feat_size: stochastic + deterministic
-global_feat: feat + embed_size
+deterministic_size: 128
+stochastic_size: n_classes*n_categoricals
+feat_size: stochastic+deterministic
+global_feat: feat+embed_size
 
 reward_layers: 2
 reward_hidden: 128
@@ -17,4 +18,6 @@ pcont_layers: 2
 pcont_hidden: 128
 action_layers: 2
 action_hidden: 128
+
+activation_func: relu
 

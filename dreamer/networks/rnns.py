@@ -7,14 +7,17 @@ from utils.net_setup import get_active_func
 class RSSMTransition(nn.Module):
     def __init__(self, args, action_size, hidden_size=200):
         super().__init__()
-        self._stoch_size = args.stochastic_size
-        self._deter_size = args.deterministic_size
+        self._stoch_size = args["stochastic_size"]
+        self._deter_size = args["deterministic_size"]
         self._hidden_size = hidden_size
         self._activaion = args['activation_func']
+        self._attention_layers = args["attention_layers"]
+        self._n_categoricals = args["n_categoricals"]
+        self._n_classes = args["n_classes"]
         self._cell = nn.GRU(hidden_size, self._deter_size)
-        self._attention_stack = AttentionEncoder(args.attention_layers, hidden_size, hidden_size, dropout=0.1)
+        self._attention_stack = AttentionEncoder(self._attention_layers, hidden_size, hidden_size, dropout=0.1)
         self._rnn_input_model = self._build_rnn_input_model(action_size + self._stoch_size)
-        self._stochastic_prior_model = DiscreteLatentDist(self._deter_size, args.n_categoricals, args.n_classes,
+        self._stochastic_prior_model = DiscreteLatentDist(self._deter_size, self._n_categoricals, self._n_classes,
                                                           self._hidden_size)
 
     def _build_rnn_input_model(self, in_dim):
@@ -35,10 +38,14 @@ class RSSMRepresentation(nn.Module):
     def __init__(self, args, transition_model: RSSMTransition):
         super().__init__()
         self._transition_model = transition_model
-        self._stoch_size = args.stochastic_size
-        self._deter_size = args.deterministic_size
-        self._stochastic_posterior_model = DiscreteLatentDist(self._deter_size + args.embed_size, args.n_categoricals, args.n_classes,
-                                                              args.hidden_size)
+        self._stoch_size = args["stochastic_size"]
+        self._deter_size = args["deterministic_size"]
+        self._embed_size = args["embed_size"]
+        self._hidden_size = args["hidden_size"]
+        self._n_categoricals = args["n_categoricals"]
+        self._n_classes = args["n_classes"]
+        self._stochastic_posterior_model = DiscreteLatentDist(self._deter_size + self._embed_size, self._n_categoricals, self._n_classes,
+                                                              self._hidden_size)
         
     
     def forward(self, obs_embed, prev_actions, prev_states, mask=None):

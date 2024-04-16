@@ -496,8 +496,6 @@ class StarCraft2Env(MultiAgentEnv):
         state_config_path = (
             Path(base_path)
             / "configs"
-            / "envs_cfgs"
-            / "smac_state_config"
             / f"{state_type}.yaml"
         )
         with open(str(state_config_path), "r", encoding="utf-8") as file:

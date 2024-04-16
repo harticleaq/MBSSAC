@@ -27,7 +27,6 @@ class Actor(nn.Module):
             act_dim,
             self.initialization_method,
             self.gain,
-            args,
         )
         self.to(device)
 

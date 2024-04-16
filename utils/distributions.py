@@ -17,6 +17,7 @@ class FixedCategorical(torch.distributions.Categorical):
         return self.probs.argmax(dim=-1, keepdim=True)
     
 
+
 class Categorical(nn.Module):
     """ Discrete distribution """
     def __init__(

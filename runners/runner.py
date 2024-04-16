@@ -11,7 +11,7 @@ from dreamer.models import DreamModel
 from utils.trans_setup import _t2n
 
 class Runner:
-    def __init__(self, args, marl_args, env_args, world_model_args) -> None:
+    def __init__(self, args, marl_args, env_args, world_model_args):
         # Initialize config settings and path et.al.
         self.args = args
         self.marl_args = marl_args
@@ -19,7 +19,10 @@ class Runner:
         self.world_model_args = world_model_args
         self.task_name = get_task_name(self.args['env'], self.env_args)
         self.run_dir, self.log_dir, self.save_dir, self.writter \
-        = init_dir()
+        = init_dir(
+            args["env"], env_args, args["marl_algo"], args["world_model"]
+            , args["exp_name"], marl_args["seed"]["seed"], logger_path= marl_args["logger"]["log_dir"] 
+        )
         save_config(self.args, self.marl_args, self.world_model_args, self.env_args, self.run_dir)
         self.log_file = open(
              os.path.join(self.run_dir, "progress.txt"), "w", encoding="utf-8"
@@ -30,8 +33,18 @@ class Runner:
 
 
         # Attribute regard of agent, env.
-        self.envs = make_train_env()
-        self.eval_envs = make_train_env()
+        self.envs = make_train_env(
+            args["env"],
+            marl_args["seed"]["seed"],
+            marl_args["train"]["n_rollout_threads"],
+            env_args,
+        )
+        self.eval_envs = make_train_env(
+            args["env"],
+            marl_args["seed"]["seed"],
+            marl_args["train"]["n_rollout_threads"],
+            env_args,
+        )
         self.num_agents = get_num_agents(args["env"], env_args)
         self.agent_deaths = np.zeros(
             (self.marl_args["train"]["n_rollout_threads"], self.num_agents, 1)
@@ -39,9 +52,14 @@ class Runner:
 
         # Instance models.
 
-        self.agent = Agent()
-        self.buffer = OffPolicyBufferFP()
-        self.world_model = DreamModel()
+        self.agent = Agent(self.eval_envs, args, marl_args, env_args, world_model_args)
+        self.buffer = OffPolicyBufferFP(
+            {**marl_args["train"], **marl_args["model"], **marl_args["algo"]},
+            self.envs.share_observation_space[0],
+            self.num_agents,
+            self.envs.observation_space,
+            self.envs.action_space,
+        )   
 
 
 

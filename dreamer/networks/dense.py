@@ -1,7 +1,7 @@
 import torch.distributions as td
 import torch.nn as nn
 
-from networks.build_model import build_model
+from dreamer.networks.build_model import build_model
 
 
 class DenseModel(nn.Module):

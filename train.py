@@ -6,10 +6,10 @@
 
 
 import argparse
-import json
+import os
 import sys
 from utils.configs_setup import get_defaults_yaml_args, update_args
-
+sys.path.append("")
 
 def main():
     """Main function."""
@@ -35,7 +35,7 @@ def main():
         help="Environment name.",
     )
     parser.add_argument(
-        "--exp_name", type=str, default="installtest", help="Experiment name."
+        "--exp_name", type=str, default="marl-based", help="Experiment name."
     )
     parser.add_argument(
         "--load_config",
@@ -56,13 +56,19 @@ def main():
     unparsed_dict = {k: v for k, v in zip(keys, values)}
     args = vars(args)  # convert to dict
    
-    marl_args, env_args = get_defaults_yaml_args(args["marl_algo"], args["env"], args["world_model"])
-    update_args(unparsed_dict, marl_args, env_args)  # update args from command line
+    marl_args, env_args, wm_args = get_defaults_yaml_args(args["marl_algo"], args["env"], args["world_model"])
+    update_args(unparsed_dict, marl_args, env_args, wm_args)  # update args from command line
     
+    # revise marl args
+    wm_args["stochastic_size"] = wm_args["n_classes"] * wm_args["n_categoricals"]
+    wm_args["feat_size"] = wm_args["stochastic_size"] + wm_args["deterministic_size"]
+    wm_args["global_feat"] = wm_args["feat_size"] + wm_args["embed_size"]
+
     # start training
     from runners.runner import Runner
 
-    runner = Runner(args, marl_args, env_args)
+    marl_args["logger"]["log_dir"] = os.path.join(os.path.dirname(__file__), 'loggers') 
+    runner = Runner(args, marl_args, env_args, wm_args)
     runner.run()
     runner.close()
 

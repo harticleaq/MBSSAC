@@ -68,10 +68,10 @@ class MLPBase(nn.Module):
         return x
 
 class ACTLayer(nn.Module):
-    def __init__(self, 
-        action_space, inputs_dim, initialization_method, gain    
-                 ):
-        super(ACTLayer).__init__()
+    def __init__(
+            self, action_space, inputs_dim, initialization_method, gain    
+        ):
+        super(ACTLayer, self).__init__()
         self.action_type = action_space.__class__.__name__
         action_dim = action_space.n
 

@@ -2,7 +2,7 @@ import torch
 import itertools
 
 from copy import deepcopy
-from algorithms.networks import ContinuousQNet
+from ossmc.algorithms.networks import ContinuousQNet
 
 class TwinContinuousQCritic:
     """Twin Continuous Q Critic.

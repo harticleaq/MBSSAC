@@ -54,8 +54,7 @@ def init_dir(env, env_args, marl_algo, world_model_args, exp_name, seed, logger_
         logger_path,
         env,
         task,
-        marl_algo,
-        world_model_args,
+        marl_algo+world_model_args,
         exp_name,
         "-".join(["seed-{:0>5}".format(seed), hms_time]),
     )

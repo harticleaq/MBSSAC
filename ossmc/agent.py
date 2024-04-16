@@ -5,15 +5,16 @@ import numpy as np
 from utils.env_setup import init_device, get_num_agents
 from common.valuenorm import ValueNorm
 from common.off_policy_buffer_fp import OffPolicyBufferFP
-from algorithms.ossac import OSSAC as Policy
-from algorithms.critic import SoftTwinContinuousQCritic as Critic
-
+from ossmc.algorithms.ossac import OSSAC as Policy
+from ossmc.algorithms.critic import SoftTwinContinuousQCritic as Critic
+from dreamer.models.DreamModel import DreamerModel
 class Agent:
-    def __init__(self, envs, args, marl_args, env_args) -> None:
+    def __init__(self, envs, args, marl_args, env_args, wm_args) -> None:
         self.args = args
         self.env_args = env_args
         self.marl_args = marl_args
         self.envs = envs
+        self.wm_args = wm_args
 
         if "policy_freq" in self.marl_args["algo"]:
             self.policy_freq = self.marl_args["algo"]["policy_freq"]
@@ -28,14 +29,14 @@ class Agent:
         self.device = init_device(self.marl_args["device"])
 
         if (
-                "use_valuenorm" in self.algo_args["train"].keys()
-                and self.algo_args["train"]["use_valuenorm"]
+                "use_valuenorm" in self.marl_args["train"].keys()
+                and self.marl_args["train"]["use_valuenorm"]
             ):
                 self.value_normalizer = ValueNorm(1, device=self.device)
         else:
             self.value_normalizer = None
 
-        self.num_agents = get_num_agents(args["env"], env_args, self.envs)
+        self.num_agents = get_num_agents(args["env"], env_args)
         
         self.action_spaces = self.envs.action_space
         for agent_id in range(self.num_agents):
@@ -43,6 +44,7 @@ class Agent:
 
 
         self.actor = []
+        self.world_model = []
         for agent_id in range(self.num_agents):
             agent = Policy(
                 {**marl_args["model"], **marl_args["algo"]},
@@ -51,8 +53,16 @@ class Agent:
                 device=self.device,
             )
             self.actor.append(agent)
-        
-
+            wm = DreamerModel(
+                self.envs.observation_space[agent_id],
+                self.envs.action_space[agent_id],
+                self.args,
+                self.env_args,
+                self.wm_args,
+                device=self.device,
+                )
+            self.world_model.append(wm)
+    
         self.critic = Critic(
              {**marl_args["train"], **marl_args["model"], **marl_args["algo"]},
                 self.envs.share_observation_space[0],
