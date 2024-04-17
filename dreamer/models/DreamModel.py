@@ -42,8 +42,12 @@ class DreamerModel(nn.Module):
             self.av_action = None
         self.q_features = DenseModel(self.hidden_size, self.pcont_hidden, 1, self.pcont_hidden)
         self.q_action = nn.Linear(self.pcont_hidden, self.action_size)
-        self.tpdv = dict(dtype=torch.float32, device=device)
+
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.wm_args["lr"])
+        
+        self.tpdv = dict(dtype=torch.float32, device=device)
+        self.tpdv_a = dict(dtype=torch.int64, device=device)
+        
         
         self.to(device)
 
@@ -61,7 +65,7 @@ class DreamerModel(nn.Module):
         _, states = self.representation(obs_embeds, prev_actions, prev_states, mask)
         return states
 
-    def rollout_representation(
+    def rollout_representation(self, 
             representation_model, steps, obs_embed, action, prev_states, done
         ):
         priors = []
@@ -86,24 +90,32 @@ class DreamerModel(nn.Module):
 
     def train_model(self, data):
         (
-            sp_share_obs, sp_obs, sp_actions, sp_available_actions,  # (n_agents, batch_size, dim)
-            sp_reward, sp_done,  sp_valid_transition, sp_term,  # EP: (batch_size, 1), FP: (n_agents * batch_size, 1)
-            sp_next_share_obs, sp_next_obs, sp_next_available_actions,  # (n_agents, batch_size, dim)
-            sp_gamma,
+            sp_obs, sp_actions, sp_available_actions, sp_reward, sp_done
         ) = data
 
-        batch_size = sp_obs.shape[0]
-        time_steps = sp_obs.shape[1]
+        time_steps = sp_obs.shape[0]
+        batch_size = sp_obs.shape[1]
         sp_obs = sp_obs.reshape(time_steps, batch_size, -1)
         sp_actions = sp_actions.reshape(time_steps, batch_size, -1)
         sp_done = sp_done.reshape(time_steps, batch_size, -1)
         sp_reward = sp_reward.reshape(time_steps, batch_size, -1)
         sp_available_actions = sp_available_actions.reshape(time_steps, batch_size, -1)
 
+
+        sp_obs = check(sp_obs).to(**self.tpdv)
+        sp_actions = check(sp_actions).to(**self.tpdv_a)
+        onehot_actions = F.one_hot(
+                sp_actions, num_classes=self.action_size
+                ).squeeze(-2)
+        sp_done = check(sp_done).to(**self.tpdv)
+        sp_reward = check(sp_reward).to(**self.tpdv)
+        sp_available_actions = check(sp_available_actions).to(**self.tpdv)
+
+
         embed = self.obs_encoder(sp_obs.reshape(-1, sp_obs.shape[-1]))
         embed = embed.reshape(time_steps, batch_size, -1)
         prev_state = self.representation.initial_state(batch_size, device=sp_obs.device) # h
-        prior, post, deters = self.rollout_representation(self.representationtime_steps, embed, sp_actions, prev_state, sp_done)
+        prior, post, deters = self.rollout_representation(self.representation, time_steps, embed, onehot_actions, prev_state, sp_done)
     
         feat = torch.cat([post.stoch, deters], -1)
         feat_dec = post.get_features()
@@ -127,11 +139,12 @@ class DreamerModel(nn.Module):
         i_feat = i_feat.reshape(time_steps - 1, batch_size, -1)
 
         # 动作损失
-        q_feat = F.relu(self.q_features(i_feat))
+        q_feat = F.relu(self.q_features(i_feat[1:]))
         action_logits = self.q_action(q_feat)
         criterion = nn.CrossEntropyLoss(reduction='none')
-        action_loss = (1. - sp_done[1:-1].reshape(-1)) * criterion(action_logits.view(-1, action_logits.shape[-1]), sp_actions[1:-1])
-      
+        action_loss = (1. - sp_done[1:-1].reshape(-1)) * criterion(action_logits.view(-1, action_logits.shape[-1]), sp_actions[1:-1].view(-1)) 
+        action_loss = torch.mean(action_loss)
+
         # 散度损失
         prior_dist = self.reshape_dist(prior)
         post_dist = self.reshape_dist(post)

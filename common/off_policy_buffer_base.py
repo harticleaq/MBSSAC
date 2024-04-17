@@ -127,6 +127,7 @@ class OffPolicyBufferBase:
                     ].copy()
                 self.next_obs[agent_id][s:e] = next_obs[agent_id].copy()
         else:  # overflow
+            self.full = True
             len1 = self.buffer_size - self.idx  # length of first segment
             len2 = length - len1  # length of second segment
 

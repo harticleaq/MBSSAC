@@ -10,7 +10,7 @@ from utils.configs_setup import get_task_name, init_dir, save_config
 from utils.env_setup import make_train_env, get_num_agents, set_seed
 from common.off_policy_buffer_fp import OffPolicyBufferFP
 from utils.trans_setup import _t2n
-from utils.distributions import Categorical
+from torch.distributions import Categorical
 
 class Runner:
     def __init__(self, args, marl_args, env_args, world_model_args):
@@ -62,10 +62,8 @@ class Runner:
             self.num_agents,
             self.envs.observation_space,
             self.envs.action_space,
+            seq_len=self.world_model_args["seq_len"]
         )   
-
-
-
 
 
     def sample_actions(self, available_actions=None):
@@ -250,7 +248,7 @@ class Runner:
                 next_available_actions.transpose(1, 0, 2),
             )
             self.insert(data)
-            for i in range(self.algo_args["train"]["n_rollout_threads"]):
+            for i in range(self.marl_args["train"]["n_rollout_threads"]):
                 if np.all(dones, axis=1)[i]:    
                     self.init_rnns(obs)
             obs = new_obs
@@ -258,16 +256,27 @@ class Runner:
             available_actions = new_available_actions
 
             if step % self.marl_args["train"]["train_interval"] == 0:
-                for _ in range(self.world_model_args.model_epochs):
+                for _ in range(self.world_model_args["model_epochs"]):
                     self.train_world_model()
                 for _ in range(update_num):
                     self.train_agent()
     
     def train_world_model(self):
-        data = self.buffer.sample()
+        data = self.buffer.sample_world_batch(self.world_model_args["batch_size"])
+        (
+            sp_obs, sp_actions, sp_available_actions, sp_reward, sp_done
+        ) = data
         for agent_id in range(self.num_agents):
+            obs = sp_obs[agent_id]
+            actions = sp_actions[agent_id]
+            available_actions = sp_available_actions[agent_id]
+            reward = sp_reward[agent_id]
+            done = sp_done[agent_id]
+
             self.agent.world_model[agent_id].train()
-            self.agent.world_model[agent_id].train_model(data)
+            self.agent.world_model[agent_id].train_model(
+                (obs, actions, available_actions, reward, done)
+            )
             self.agent.world_model[agent_id].eval()
 
     def train_agent(self):

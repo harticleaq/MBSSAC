@@ -9,7 +9,7 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
     When FP state is used, the critic takes different global state as input for different actors. Thus, OffPolicyBufferFP has an extra dimension for number of agents.
     """
 
-    def __init__(self, args, share_obs_space, num_agents, obs_spaces, act_spaces):
+    def __init__(self, args, share_obs_space, num_agents, obs_spaces, act_spaces, seq_len=20):
         """Initialize off-policy buffer.
         Args:
             args: (dict) arguments
@@ -19,7 +19,7 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
             act_spaces: (gym.Space) action spaces
         """
         super(OffPolicyBufferFP, self).__init__(args, share_obs_space, num_agents, obs_spaces, act_spaces)
-
+        self.seq_len = seq_len
         # Buffer for share observations
         self.share_obs = np.zeros((self.buffer_size, self.num_agents, *self.share_obs_shape), dtype=np.float32)
 
@@ -32,6 +32,33 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
         # Buffer for done and termination flags
         self.dones = np.full((self.buffer_size, self.num_agents, 1), False)
         self.terms = np.full((self.buffer_size, self.num_agents, 1), False)
+        self.full = False
+
+    def sample_world_batch(self, batch_size):
+        
+        idxs = self.sample_positions(batch_size)
+        vec_idxs = idxs.transpose().reshape(-1)
+
+        obs = np.array([self.obs[agent_id][vec_idxs] for agent_id in range(self.num_agents)]).reshape(self.num_agents, self.seq_len, batch_size, -1)
+        reward = np.array([self.rewards[vec_idxs][:, agent_id] for agent_id in range(self.num_agents)]).reshape(self.num_agents, self.seq_len, batch_size, -1)
+        action = np.array([self.actions[agent_id][vec_idxs] for agent_id in range(self.num_agents)]).reshape(self.num_agents, self.seq_len, batch_size, -1)
+        av_action = np.array([self.available_actions[agent_id][vec_idxs] for agent_id in range(self.num_agents)]).reshape(self.num_agents, self.seq_len, batch_size, -1)
+        done = np.array([self.dones[vec_idxs][:, agent_id] for agent_id in range(self.num_agents)]).reshape(self.num_agents, self.seq_len, batch_size, -1)
+       
+        return (obs, action, av_action, reward, done)
+    
+    def sample_positions(self, batch_size):
+        data_index = []
+        for _ in range(batch_size):
+            valid_idx = False
+            while not valid_idx:
+                idx = np.random.randint(0, self.buffer_size if self.full else self.idx - self.seq_len + 1)
+                idxs = np.arange(idx, idx + self.seq_len) % self.buffer_size
+                valid_idx = self.idx not in idxs[1:]
+            
+            data_index.append(idxs)
+        return np.asarray(data_index)
+    
 
     def sample(self):
         """Sample data for training.

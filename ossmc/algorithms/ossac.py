@@ -81,7 +81,6 @@ class OSSAC:
         self.action_type = act_space.__class__.__name__
 
         self.actor = Actor(args, feat_size, act_space, device)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
         self.turn_off_grad()
 
     def get_actions(self, obs, available_actions=None, stochastic=True):

@@ -31,7 +31,7 @@ class RSSMTransition(nn.Module):
         batch_size = prev_actions.shape[0]
         stoch_input = self._rnn_input_model(torch.cat([prev_actions, prev_states.stoch], dim=-1))
         if len(stoch_input.shape ) < 3:
-            stoch_input = stoch_input.unsqueeze(0)
+            stoch_input = stoch_input.unsqueeze(-2)
         attn = self._attention_stack(stoch_input, mask=mask)
 
         deter_state = self._cell(attn.reshape(1, batch_size , -1),
