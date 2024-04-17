@@ -17,7 +17,9 @@ class DenseModel(nn.Module):
 class DenseBinaryModel(DenseModel):
     def __init__(self, in_dim, out_dim, layers, hidden, activation=nn.ELU):
         super().__init__(in_dim, out_dim, layers, hidden, activation)
-
+        """
+        out_dim: multi variance
+        """
     def forward(self, features):
         dist_inputs = self.model(features)
         return td.independent.Independent(td.Bernoulli(logits=dist_inputs), 1)

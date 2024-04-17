@@ -8,6 +8,11 @@ from torch.distributions import OneHotCategorical
 class DiscreteLatentDist(nn.Module):
     def __init__(self, in_dim, n_categoricals, n_classes, hidden_size):
         super().__init__()
+        """
+        dists: h -> class_dist(logits)
+        latents: class_dist.sample()
+        return: (logits, latents)
+        """
         self.n_categoricals = n_categoricals
         self.n_classes = n_classes
         self.dists = nn.Sequential(nn.Linear(in_dim, hidden_size),

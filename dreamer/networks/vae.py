@@ -8,6 +8,12 @@ class Decoder(nn.Module):
 
     def __init__(self, embed, hidden, out_dim, layers=2):
         super().__init__()
+        """
+        embed: (time_steps * batch_size, *dim)  
+        hidden: (time_steps * batch_size, *dim)
+        out_dim: (time_steps * batch_size, *dim)
+        (h, z) -> x'
+        """
         self.fc1 = build_model(embed, hidden, layers, hidden, nn.ReLU)
         self.fc2 = nn.Linear(hidden, out_dim)
 
@@ -20,7 +26,12 @@ class Encoder(nn.Module):
 
     def __init__(self, in_dim, hidden, embed, layers=2):
         super().__init__()
-
+        """
+        in_dim: (time_steps * batch_size, *dim)
+        hidden: (time_steps * batch_size, *dim)
+        embed: (time_steps * batch_size, *dim)
+        obs -> embed(o)
+        """
         self.fc1 = nn.Linear(in_dim, hidden)
         self.encoder = build_model(hidden, embed, layers, hidden, nn.ReLU)
 

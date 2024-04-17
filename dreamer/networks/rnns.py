@@ -8,6 +8,14 @@ from utils.trans_setup import get_RSSMState
 class RSSMTransition(nn.Module):
     def __init__(self, args, action_size, hidden_size=200):
         super().__init__()
+        """
+        _rnn_input_model: (z_, a_) -> stoch_input
+        _attention_stack: stoch_input -> attn
+        _cell: (attn, h_) -> h
+        _stochastic_prior_model: h -> (logits, z')
+        return:  (logits, z', h)
+        
+        """
         self.args = args
         self._stoch_size = args["stochastic_size"]
         self._deter_size = args["deterministic_size"]
@@ -42,6 +50,12 @@ class RSSMTransition(nn.Module):
 class RSSMRepresentation(nn.Module):
     def __init__(self, args, transition_model: RSSMTransition):
         super().__init__()
+        """
+        _transition_model: (a_, z_) -> (logits, z', h)
+        _stochastic_posterior_model: (h, embed(o)) -> logits, z
+        posterior_states: (logits, z, h)
+        return (z', z)
+        """
         self.args = args
         self._transition_model = transition_model
         self._stoch_size = args["stochastic_size"]
