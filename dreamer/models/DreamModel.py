@@ -77,7 +77,7 @@ class DreamerModel(nn.Module):
             posteriors.append(posterior_states)
         prior = stack_states(priors, dim=0)
         post = stack_states(posteriors, dim=0)
-        return prior.map(lambda x: x[:-1]), post.map(lambda x: x[:-1]), post.deter[1:]
+        return prior.map(lambda x: x[:]), post.map(lambda x: x[:]), post.deter[:]
 
     def kl_div_categorical(self, p, q):
         eps = 1e-7
@@ -85,7 +85,7 @@ class DreamerModel(nn.Module):
 
 
     def reshape_dist(self, dist):
-        return dist.get_dist(dist.deter.shape[:-1], self.wm_args["n_categoricals"], self.wm_args["n_classes"])
+        return dist.get_dist(dist.stoch.shape[:-1], self.wm_args["n_categoricals"], self.wm_args["n_classes"])
 
 
     def train_model(self, data):
@@ -117,32 +117,32 @@ class DreamerModel(nn.Module):
         prev_state = self.representation.initial_state(batch_size, device=sp_obs.device) # h
         prior, post, deters = self.rollout_representation(self.representation, time_steps, embed, onehot_actions, prev_state, sp_done)
     
-        feat = torch.cat([post.stoch, deters], -1) # (z[:-1], h[1:])
-        feat_dec = post.get_features() # (z[:-1], h[:-1])
+        feat = torch.cat([post.stoch, deters], -1) # (z, h)
+        feat_dec = post.get_features() # (z, h)
 
         # 重构损失 (feat_dec -> x', i_feat)
         x_pred, i_feat = self.obs_decoder(feat_dec.reshape(-1, feat_dec.shape[-1]))
-        x = sp_obs[:-1].reshape(-1, sp_obs.shape[-1])
-        rec_loss = (F.smooth_l1_loss(x_pred, x, reduction='none') * (1. - sp_done[:-1].reshape(-1, 1))).sum() / np.prod(list(x.shape[:-1]))
+        x = sp_obs.reshape(-1, sp_obs.shape[-1])
+        rec_loss = (F.smooth_l1_loss(x_pred, x, reduction='none') * (1. - sp_done.reshape(-1, 1))).sum() / np.prod(list(x.shape[:-1]))
         
         
         # 奖励损失 (feat -> r')
-        reward_loss = F.smooth_l1_loss(self.reward_model(feat), sp_reward[1:])
+        reward_loss = F.smooth_l1_loss(self.reward_model(feat), sp_reward)
 
         # 折扣损失 (feat -> gamma')
         pred_pcont = self.pcont(feat)
-        pcont_loss = -torch.mean(pred_pcont.log_prob(1. - sp_done[1:]))
+        pcont_loss = -torch.mean(pred_pcont.log_prob(1. - sp_done))
 
         # 可执行动作损失 (feat_dec -> a')
         pred_av_action = self.av_action(feat_dec)
-        av_action_loss = -torch.mean(pred_av_action.log_prob(sp_available_actions[:-1])) if sp_available_actions is not None else 0.
+        av_action_loss = -torch.mean(pred_av_action.log_prob(sp_available_actions)) if sp_available_actions is not None else 0.
 
         # 动作损失 
-        i_feat = i_feat.reshape(time_steps - 1, batch_size, -1)
-        q_feat = F.relu(self.q_features(i_feat[1:]))
+        i_feat = i_feat.reshape(time_steps, batch_size, -1)
+        q_feat = F.relu(self.q_features(i_feat))
         action_logits = self.q_action(q_feat)
         criterion = nn.CrossEntropyLoss(reduction='none')
-        action_loss = (1. - sp_done[1:-1].reshape(-1)) * criterion(action_logits.view(-1, action_logits.shape[-1]), sp_actions[1:-1].view(-1)) 
+        action_loss = (1. - sp_done.reshape(-1)) * criterion(action_logits.view(-1, action_logits.shape[-1]), sp_actions.view(-1)) 
         action_loss = torch.mean(action_loss)
 
         # 散度损失

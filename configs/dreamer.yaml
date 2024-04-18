@@ -3,7 +3,7 @@ attention_layers: 2
 hidden_size: 64
 model_hidden: 64
 embed_size: 64
-n_categoricals: 7
+n_categoricals: 8
 n_classes: 7
 deterministic_size: 64
 stochastic_size: n_classes*n_categoricals
