@@ -34,6 +34,9 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
         self.terms = np.full((self.buffer_size, self.num_agents, 1), False)
         self.full = False
 
+    def reshape_batch(self, batch):
+        return batch.reshape(self.num_agents, self.seq_len, self.batch_size, -1)
+
     def sample_world_batch(self, batch_size):
         
         idxs = self.sample_positions(batch_size)
@@ -59,6 +62,121 @@ class OffPolicyBufferFP(OffPolicyBufferBase):
             data_index.append(idxs)
         return np.asarray(data_index)
     
+    def sample_ac_batch(self):
+        self.update_end_flag()
+        indexs = self.sample_positions(self.batch_size)
+        indexs = indexs.transpose().reshape(-1)
+        sp_share_obs = np.concatenate(
+            self.share_obs[indexs].transpose(1, 0, 2), axis=0
+        ) 
+        
+        sp_obs = np.array([self.obs[agent_id][indexs] for agent_id in range(self.num_agents)])
+
+        sp_actions = np.array(
+            [self.actions[agent_id][indexs] for agent_id in range(self.num_agents)]
+        )
+        
+        sp_valid_transitions = np.array(
+            [self.valid_transitions[agent_id][indexs] for agent_id in range(self.num_agents)]
+        )
+        if self.act_spaces[0].__class__.__name__ == 'Discrete':
+            sp_available_actions = np.array(
+                [self.available_actions[agent_id][indexs] for agent_id in range(self.num_agents)]
+            )
+            
+        indice = np.repeat(np.expand_dims(indexs, axis=-1), self.num_agents, axis=-1)  # (batch_size, n_agents)
+        indices = [indice]
+        for _ in range(self.n_step - 1):
+            indices.append(self.next(indices[-1]))
+        
+        # get data at the last indice
+        sp_done = np.concatenate(
+            [self.dones[indices[-1][:, agent_id], agent_id] for agent_id in range(self.num_agents)]
+        )  # (n_agents, batch_size, 1) -> (n_agents * batch_size, 1)
+        sp_term = np.concatenate(
+            [self.terms[indices[-1][:, agent_id], agent_id] for agent_id in range(self.num_agents)]
+        )  # (n_agents, batch_size, 1) -> (n_agents * batch_size, 1)
+        sp_next_share_obs = np.concatenate(
+            [self.next_share_obs[indices[-1][:, agent_id], agent_id] for agent_id in range(self.num_agents)]
+        )  # (n_agents, batch_size, *dim) -> (n_agents * batch_size, *dim)
+        sp_next_obs = np.array(
+            [self.next_obs[agent_id][indices[-1][:, agent_id]] for agent_id in range(self.num_agents)]
+        )
+        
+        if self.act_spaces[0].__class__.__name__ == 'Discrete':
+            sp_next_available_actions = np.array(
+                [self.next_available_actions[agent_id][indices[-1][:, agent_id]] for agent_id in range(self.num_agents)]
+            )
+            
+        # compute accumulated rewards and the corresponding gamma
+        gamma_buffer = np.ones((self.num_agents, self.n_step + 1))
+        for i in range(1, self.n_step + 1):
+            gamma_buffer[:, i] = gamma_buffer[:, i - 1] * self.gamma
+        sp_reward = np.zeros((self.batch_size*self.seq_len, self.num_agents, 1))
+        gammas = np.full((self.batch_size*self.seq_len, self.num_agents), self.n_step)
+        for n in range(self.n_step - 1, -1, -1):
+            now = indices[n]
+            end_flag = np.column_stack(
+                [self.end_flag[now[:, agent_id], agent_id] for agent_id in range(self.num_agents)]
+            )
+            gammas[end_flag > 0] = n + 1
+            sp_reward[end_flag > 0] = 0.0
+            rewards = np.expand_dims(
+                np.column_stack([self.rewards[now[:, agent_id], agent_id] for agent_id in range(self.num_agents)]), axis=-1
+            )
+            sp_reward = rewards + self.gamma * sp_reward
+        sp_reward = np.concatenate(
+            sp_reward.transpose(1, 0, 2), axis=0
+        )
+        sp_gamma = np.concatenate(
+           [gamma_buffer[agent_id][gammas[:, agent_id]] for agent_id in range(self.num_agents)]
+        ).reshape(-1, 1)  # (n_agents * batch_size, ) -> (n_agents * batch_size, 1)
+        
+        sp_share_obs = self.reshape_batch(sp_share_obs)
+        sp_obs = self.reshape_batch(sp_obs)
+        sp_actions = self.reshape_batch(sp_actions)
+        sp_valid_transitions = self.reshape_batch(sp_valid_transitions)
+        sp_available_actions = self.reshape_batch(sp_available_actions)
+        
+        sp_done = self.reshape_batch(sp_done)
+        sp_term = self.reshape_batch(sp_term)
+        sp_next_share_obs = self.reshape_batch(sp_next_share_obs)
+        sp_next_obs = self.reshape_batch(sp_next_obs)
+        sp_next_available_actions = self.reshape_batch(sp_next_available_actions)
+        sp_reward = self.reshape_batch(sp_reward)
+        sp_gamma = self.reshape_batch(sp_gamma)
+
+        if self.act_spaces[0].__class__.__name__ == 'Discrete':
+            return (
+                sp_share_obs,
+                sp_obs,
+                sp_actions,
+                sp_available_actions,
+                sp_reward,
+                sp_done,
+                sp_valid_transitions,
+                sp_term,
+                sp_next_share_obs,
+                sp_next_obs,
+                sp_next_available_actions,
+                sp_gamma
+            )
+        else:
+            return (
+                sp_share_obs,
+                sp_obs,
+                sp_actions,
+                None,
+                sp_reward,
+                sp_done,
+                sp_valid_transitions,
+                sp_term,
+                sp_next_share_obs,
+                sp_next_obs,
+                None,
+                sp_gamma,
+            )
+
 
     def sample(self):
         """Sample data for training.

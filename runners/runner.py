@@ -220,7 +220,6 @@ class Runner:
 
         update_num = int(  # update number per train
             self.marl_args["train"]["update_per_train"]
-            * self.marl_args["train"]["train_interval"]
         )
 
         self.init_rnns()
@@ -258,7 +257,7 @@ class Runner:
             if step % self.marl_args["train"]["train_interval"] == 0:
                 for _ in range(self.world_model_args["model_epochs"]):
                     self.train_world_model()
-                for _ in range(update_num):
+                for _ in range(update_num): 
                     self.train_agent()
     
     def train_world_model(self):
@@ -280,5 +279,6 @@ class Runner:
             self.agent.world_model[agent_id].eval()
 
     def train_agent(self):
-        pass
+        data = self.buffer.sample_ac_batch()
+        self.agent.train_ac(data)
 

@@ -66,7 +66,7 @@ class Agent:
     
         self.critic = Critic(
              {**marl_args["train"], **marl_args["model"], **marl_args["algo"]},
-                self.envs.share_observation_space[0],
+                [self.wm_args["feat_size"] * self.num_agents],
                 self.envs.action_space,
                 self.num_agents,
                 self.state_type,
@@ -103,5 +103,120 @@ class Agent:
             self.alpha = [self.marl_args["algo"]["alpha"]] * self.num_agents
 
 
-    def train(self):
+    def train_ac(self, data):
         self.total_it += 1
+        (
+            sp_share_obs, sp_obs, sp_actions, sp_available_actions,  # (n_agents, batch_size, dim)
+            sp_reward, sp_done, sp_valid_transition, sp_term,  # EP: (batch_size, 1), FP: (n_agents * batch_size, 1)
+            sp_next_share_obs, sp_next_obs, sp_next_available_actions,  # (n_agents, batch_size, dim)
+            sp_gamma,
+        ) = data
+
+        self.critic.turn_on_grad()
+        all_actions = []
+        all_logp_actions = []
+        all_feats = []
+        all_av_actions = []
+        all_reward = []
+        all_discount = []
+        for agent_id in range(self.num_agents):
+            (next_states, actions, av_actions, pis) = self.world_model[agent_id].generate_with_policy(
+                (sp_obs[agent_id], sp_actions[agent_id], sp_done[agent_id]), self.actor[agent_id]
+                )
+            all_actions.append(actions)
+            feat = next_states.get_features()
+            reward = self.world_model[agent_id].reward_model(feat)
+            discount = self.world_model[agent_id].pcont(feat).mean
+
+            all_feats.append(feat)
+            all_logp_actions.append(pis)
+            all_av_actions.append(av_actions)
+            all_reward.append(reward)
+            all_discount.append(discount)
+               
+        imag_feats = torch.cat(all_feats, dim=-1)
+        imag_reward = torch.stack(all_reward, dim=0).mean(dim=0)[:-1]
+        imag_discount = torch.stack(all_discount, dim=0).mean(dim=0)[1:]
+
+        cur_feats = imag_feats[:-1]
+        cur_actions = [a[:-1] for a in all_actions]
+
+        next_feats = imag_feats[1:]
+        next_actions = [a[1:] for a in all_actions]
+        next_logp_actions = [a[1:] for a in all_logp_actions]
+
+        
+        self.critic.train(
+            cur_feats,
+            cur_actions,
+            imag_reward,
+            imag_discount,
+            next_feats,
+            next_actions,
+            next_logp_actions,
+        )
+        self.critic.turn_off_grad()
+
+        if self.total_it % self.policy_freq == 0:
+            actions = []
+            logp_actions = []
+            feats = []
+
+            
+            for agent_id in range(self.num_agents): 
+                (next_state, action, _, logp) = self.world_model[agent_id].generate_with_policy(
+                    (sp_obs[agent_id], sp_actions[agent_id], sp_done[agent_id]), self.actor[agent_id]
+                    )
+                actions.append(action)
+                logp_actions.append(logp)
+                feat = next_state.get_features()
+                feats.append(feat)
+                
+            if self.fixed_order:
+                agent_order = list(range(self.num_agents))
+            else:
+                agent_order = list(np.random.permutation(self.num_agents))
+            for agent_id in agent_order:
+                self.actor[agent_id].turn_on_grad()
+                (next_state, action, _, logp) = self.world_model[agent_id].generate_with_policy(
+                    (sp_obs[agent_id], sp_actions[agent_id], sp_done[agent_id]), self.actor[agent_id]
+                    )
+                actions[agent_id] = action
+                logp_actions[agent_id] = logp
+                feat = next_state.get_features()
+                feats[agent_id] = feat
+            
+                value_pred = self.critic.get_values(feats, actions)
+
+                actor_loss = -torch.mean(
+                    value_pred - self.alpha[agent_id] * logp_actions[agent_id]
+                )
+                
+                self.actor[agent_id].actor_optimizer.zero_grad()
+                actor_loss.backward()
+                self.actor[agent_id].actor_optimizer.step()
+                self.actor[agent_id].turn_off_grad()
+
+                # train this agent's alpha
+                if self.algo_args["algo"]["auto_alpha"]:
+                    log_prob = (
+                        logp_actions[agent_id].detach()
+                        + self.target_entropy[agent_id]
+                    )
+                    alpha_loss = -(self.log_alpha[agent_id] * log_prob).mean()
+                    self.alpha_optimizer[agent_id].zero_grad()
+                    alpha_loss.backward()
+                    self.alpha_optimizer[agent_id].step()
+                    self.alpha[agent_id] = torch.exp(
+                        self.log_alpha[agent_id].detach()
+                    )
+
+                actions[agent_id] = action.detach()
+
+            # train critic's alpha
+            if self.algo_args["algo"]["auto_alpha"]:
+                self.critic.update_alpha(logp_actions, np.sum(self.target_entropy))
+            self.critic.soft_update()    
+
+
+        

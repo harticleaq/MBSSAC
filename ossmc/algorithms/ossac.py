@@ -81,6 +81,8 @@ class OSSAC:
         self.action_type = act_space.__class__.__name__
 
         self.actor = Actor(args, feat_size, act_space, device)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
+        # self.actor.eval()
         self.turn_off_grad()
 
     def get_actions(self, obs, available_actions=None, stochastic=True):
@@ -122,12 +124,14 @@ class OSSAC:
 
     def turn_on_grad(self):
         """Turn on grad for actor parameters."""
+        # self.actor.train()
         for p in self.actor.parameters():
             p.requires_grad = True
  
 
     def turn_off_grad(self):
         """Turn off grad for actor parameters."""
+        # self.actor.eval()
         for p in self.actor.parameters():
             p.requires_grad = False
 

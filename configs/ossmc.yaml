@@ -77,7 +77,7 @@ algo:
   # off-policy buffer size
   buffer_size: 100000
   # training batch size
-  batch_size: 32
+  batch_size: 4
   # coefficient for target model soft update
   polyak: 0.005
   # the number of steps to look ahead

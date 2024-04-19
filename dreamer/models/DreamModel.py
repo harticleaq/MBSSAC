@@ -47,8 +47,7 @@ class DreamerModel(nn.Module):
         
         self.tpdv = dict(dtype=torch.float32, device=device)
         self.tpdv_a = dict(dtype=torch.int64, device=device)
-        
-        
+        self.turn_off_grad()
         self.to(device)
 
     
@@ -87,8 +86,49 @@ class DreamerModel(nn.Module):
     def reshape_dist(self, dist):
         return dist.get_dist(dist.stoch.shape[:-1], self.wm_args["n_categoricals"], self.wm_args["n_classes"])
 
+    def generate_with_policy(self, data, policy):
+        (sp_obs, sp_actions, sp_done) = data
+        time_steps = sp_obs.shape[0]
+        batch_size = sp_obs.shape[1]
+        sp_obs = sp_obs.reshape(time_steps, batch_size, -1)
+        sp_actions = sp_actions.reshape(time_steps, batch_size, -1)
+        sp_done = sp_done.reshape(time_steps, batch_size, -1)
+
+        sp_obs = check(sp_obs).to(**self.tpdv)
+        sp_actions = check(sp_actions).to(**self.tpdv_a)
+        onehot_actions = F.one_hot(
+                sp_actions, num_classes=self.action_size
+                ).squeeze(-2)
+        sp_done = check(sp_done).to(**self.tpdv)
+
+        embed = self.obs_encoder(sp_obs.reshape(-1, sp_obs.shape[-1]))
+        embed = embed.reshape(time_steps, batch_size, -1)
+        prev_state = self.representation.initial_state(batch_size, device=sp_obs.device) # h
+        _, post, _ = self.rollout_representation(self.representation, time_steps, embed, onehot_actions, prev_state, sp_done)
+        post = post.map(lambda x: x.reshape(time_steps * batch_size, -1))
+        state = post
+        next_states = []
+        actions = []
+        av_actions = []
+        pis = []
+        for t in range(self.wm_args["horizon"]):
+            feat = state.get_features()
+            if self.av_action is not None:
+                avail_actions = self.av_action(feat).sample()
+                av_actions.append(avail_actions.squeeze(0))
+            else:
+                avail_actions = None
+            action, pi = policy.get_actions_with_logprobs(feat, avail_actions)
+            next_states.append(state)
+            pis.append(pi)
+            actions.append(action)
+            state = self.transition(action.detach(), state)
+        return (stack_states(next_states, dim=0), torch.stack(actions, dim=0),torch.stack(av_actions, dim=0) if len(av_actions) > 0 else None
+                ,torch.stack(pis, dim=0))
+
 
     def train_model(self, data):
+        self.turn_on_grad()
         (
             sp_obs, sp_actions, sp_available_actions, sp_reward, sp_done
         ) = data
@@ -159,3 +199,15 @@ class DreamerModel(nn.Module):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.parameters(), self.wm_args["grad_clip"])
         self.optimizer.step()
+        self.turn_off_grad()
+    
+    def turn_on_grad(self):
+        """Turn on the gradient for the critic network."""
+        for param in self.parameters():
+            param.requires_grad = True
+
+    def turn_off_grad(self):
+        """Turn off the gradient for the critic network."""
+        for param in self.parameters():
+            param.requires_grad = False
+
