@@ -3,6 +3,7 @@ import os
 import torch
 import numpy as np
 import setproctitle
+import torch.nn.functional as F
 
 from copy import deepcopy
 from ossmc.agent import Agent
@@ -150,7 +151,7 @@ class Runner:
                     action
                 ))
             self.prev_rnn_state[agent_id] = state
-            self.prev_actions[agent_id] = action
+            self.prev_actions[agent_id] = F.one_hot(action, num_classes=self.max_action_shape).squeeze(-2) 
         
         return np.array(actions).transpose(1, 0, 2)
 
@@ -247,18 +248,29 @@ class Runner:
                 next_available_actions.transpose(1, 0, 2),
             )
             self.insert(data)
-            for i in range(self.marl_args["train"]["n_rollout_threads"]):
-                if np.all(dones, axis=1)[i]:    
-                    self.init_rnns(obs)
             obs = new_obs
             share_obs = new_share_obs
             available_actions = new_available_actions
+            for i in range(self.marl_args["train"]["n_rollout_threads"]):
+                if np.all(dones, axis=1)[i]:    
+                    self.init_rnns()
 
             if step % self.marl_args["train"]["train_interval"] == 0:
                 for _ in range(self.world_model_args["model_epochs"]):
                     self.train_world_model()
                 for _ in range(update_num): 
                     self.train_agent()
+
+            if step % self.marl_args["train"]["eval_interval"] == 0:
+                cur_step = (
+                    self.marl_args["train"]["warmup_steps"]
+                    + step * self.marl_args["train"]["n_rollout_threads"]
+                )//self.marl_args["train"]["eval_interval"]
+               
+                print(
+                    f"Env {self.args['env']} Task {self.task_name} Algo {self.args['marl_algo']} Exp {self.args['exp_name']} Evaluation at step {cur_step} / {self.marl_args['train']['num_env_steps']}:"
+                )
+                self.eval(cur_step)
     
     def train_world_model(self):
         data = self.buffer.sample_world_batch(self.world_model_args["batch_size"])
@@ -282,3 +294,96 @@ class Runner:
         data = self.buffer.sample_ac_batch()
         self.agent.train_ac(data)
 
+    @torch.no_grad()
+    def eval(self, step):
+        """Evaluate the model"""
+        eval_episode_rewards = []
+        one_episode_rewards = []
+        for eval_i in range(self.marl_args["eval"]["n_eval_rollout_threads"]):
+            one_episode_rewards.append([])
+            eval_episode_rewards.append([])
+        eval_episode = 0
+        eval_battles_won = 0
+
+        episode_lens = []
+        one_episode_len = np.zeros(
+            self.marl_args["eval"]["n_eval_rollout_threads"], dtype=np.int
+        )
+        eval_obs, eval_share_obs, eval_available_actions = self.eval_envs.reset()
+        self.init_rnns()
+        while True:
+            eval_actions = self.get_actions(
+                eval_obs, available_actions=eval_available_actions, add_random=False, 
+
+            )
+            (
+                eval_obs,
+                eval_share_obs,
+                eval_rewards,
+                eval_dones,
+                eval_infos,
+                eval_available_actions,
+            ) = self.eval_envs.step(eval_actions)
+            
+            for i in range(self.marl_args["train"]["n_rollout_threads"]):
+                if np.all(eval_dones, axis=1)[i]:    
+                    self.init_rnns()
+            for eval_i in range(self.marl_args["eval"]["n_eval_rollout_threads"]):
+                one_episode_rewards[eval_i].append(eval_rewards[eval_i])
+
+            one_episode_len += 1
+
+            eval_dones_env = np.all(eval_dones, axis=1)
+
+            for eval_i in range(self.marl_args["eval"]["n_eval_rollout_threads"]):
+                if eval_dones_env[eval_i]:
+                    eval_episode += 1
+                    if "smac" in self.args["env"]:
+                        if eval_infos[eval_i][0]["won"]:
+                            eval_battles_won += 1
+                    eval_episode_rewards[eval_i].append(
+                        np.sum(one_episode_rewards[eval_i], axis=0)
+                    )
+                    one_episode_rewards[eval_i] = []
+                    episode_lens.append(one_episode_len[eval_i].copy())
+                    one_episode_len[eval_i] = 0
+
+
+            if eval_episode >= self.marl_args["eval"]["eval_episodes"]:
+                # eval_log returns whether the current model should be saved
+                eval_episode_rewards = np.concatenate(
+                    [rewards for rewards in eval_episode_rewards if rewards]
+                )
+                eval_avg_rew = np.mean(eval_episode_rewards)
+                eval_avg_len = np.mean(episode_lens)
+                if "smac" in self.args["env"]:
+                    print(
+                        "Eval win rate is {}, eval average episode rewards is {}, eval average episode length is {}.".format(
+                            eval_battles_won / eval_episode, eval_avg_rew, eval_avg_len
+                        )
+                    )
+                    self.log_file.write(
+                        ",".join(
+                            map(
+                                str,
+                                [
+                                    step,
+                                    eval_avg_rew,
+                                    eval_avg_len,
+                                    eval_battles_won / eval_episode,
+                                ],
+                            )
+                        )
+                        + "\n"
+                    )
+                self.log_file.flush()
+                self.writter.add_scalar(
+                    "eval_average_episode_rewards", eval_avg_rew, step
+                )
+
+                self.writter.add_scalar(
+                    "eval_average_episode_length", eval_avg_len, step
+                )
+                
+                break
+        # self.eval_envs.close()

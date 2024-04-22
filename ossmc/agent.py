@@ -198,7 +198,7 @@ class Agent:
                 self.actor[agent_id].turn_off_grad()
 
                 # train this agent's alpha
-                if self.algo_args["algo"]["auto_alpha"]:
+                if self.marl_args["algo"]["auto_alpha"]:
                     log_prob = (
                         logp_actions[agent_id].detach()
                         + self.target_entropy[agent_id]
@@ -214,7 +214,7 @@ class Agent:
                 actions[agent_id] = action.detach()
 
             # train critic's alpha
-            if self.algo_args["algo"]["auto_alpha"]:
+            if self.marl_args["algo"]["auto_alpha"]:
                 self.critic.update_alpha(logp_actions, np.sum(self.target_entropy))
             self.critic.soft_update()    
 
