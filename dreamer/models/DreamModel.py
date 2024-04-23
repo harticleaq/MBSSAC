@@ -29,17 +29,24 @@ class DreamerModel(nn.Module):
         self.pcont_layers = wm_args["pcont_layers"]
         self.pcont_hidden = wm_args["pcont_hidden"]
 
+        # obs encoder: o -> e(o)
         self.obs_encoder = Encoder(obs_shape, self.hidden_size, self.embed_size)  
+        # hidden and feat decoder: z -> o', f(z)
         self.obs_decoder = Decoder(self.feat_size, self.hidden_size, obs_shape)
+        # transition: (z_, a_, h_) -> (logits, z', h)
         self.transition = RSSMTransition(self.wm_args, self.action_size, self.hidden_size)
+        # representation: (e(o), a_, z_, h_) -> (z', z) 
         self.representation = RSSMRepresentation(self.wm_args, self.transition)
+        # reward model: z -> r
         self.reward_model = DenseModel(self.feat_size, 1, self.reward_layers, self.reward_hidden)
+        # discount model: z -> p
         self.pcont = DenseBinaryModel(self.feat_size, 1, self.pcont_layers, self.pcont_hidden)
 
         if  "smac" in args["env"]:
             self.av_action = DenseBinaryModel(self.feat_size, self.action_size, self.pcont_layers, self.pcont_hidden)  
         else:
             self.av_action = None
+        # q feat action: f(z) -> a
         self.q_features = DenseModel(self.hidden_size, self.pcont_hidden, 1, self.pcont_hidden)
         self.q_action = nn.Linear(self.pcont_hidden, self.action_size)
 

@@ -88,7 +88,7 @@ class OSSAC:
     def get_actions(self, obs, available_actions=None, stochastic=True):
         """Get actions for observations.
         Args:
-            obs: (np.ndarray) observations of actor, shape is (n_threads, dim) or (batch_size, dim)
+            obs: feat of dreamer model, shape is (n_threads, dim) or (batch_size, dim)
             available_actions: (np.ndarray) denotes which actions are available to agent
                                  (if None, all actions available)
             stochastic: (bool) stochastic actions or deterministic actions
@@ -101,10 +101,10 @@ class OSSAC:
               stochastic)
         return actions
     
-    def get_actions_with_logprobs(self, obs, available_actions=None, stochastic=True):
+    def get_actions_with_logprobs(self, obs, available_actions=None):
         """Get actions and logprobs of actions for observations.
         Args:
-            obs: (np.ndarray) observations of actor, shape is (batch_size, dim)
+            obs: feat of dreamer, shape is (batch_size, dim)
             available_actions: (np.ndarray) denotes which actions are available to agent
                                  (if None, all actions available)
             stochastic: (bool) stochastic actions or deterministic actions
@@ -114,9 +114,10 @@ class OSSAC:
         """
         obs = check(obs).to(**self.tpdv)
         logits = self.actor.get_logits(obs, available_actions)
+        # onehot action form
         actions = gumbel_softmax(
             logits, hard=True, device=self.device
-        )  # onehot actions
+        )  
         logp_actions = torch.sum(actions * logits, dim=-1, keepdim=True)
         return actions, logp_actions
     

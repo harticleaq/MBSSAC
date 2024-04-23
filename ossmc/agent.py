@@ -47,6 +47,7 @@ class Agent:
         self.actor = []
         self.world_model = []
         for agent_id in range(self.num_agents):
+            # individual policy construction: feat -> a, log_prob(a)
             agent = Policy(
                 {**marl_args["model"], **marl_args["algo"]},
                 self.wm_args["feat_size"],
@@ -54,6 +55,7 @@ class Agent:
                 device=self.device,
             )
             self.actor.append(agent)
+            # individual dreamer model construction: obs, s_ -> (z, z')
             wm = DreamerModel(
                 self.envs.observation_space[agent_id],
                 self.envs.action_space[agent_id],
@@ -63,7 +65,8 @@ class Agent:
                 device=self.device,
                 )
             self.world_model.append(wm)
-    
+
+        # global critic construction: feat -> Q(feat, a)
         self.critic = Critic(
              {**marl_args["train"], **marl_args["model"], **marl_args["algo"]},
                 [self.wm_args["feat_size"] * self.num_agents],

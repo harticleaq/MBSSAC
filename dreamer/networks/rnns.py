@@ -13,8 +13,10 @@ class RSSMTransition(nn.Module):
         _attention_stack: stoch_input -> attn
         _cell: (attn, h_) -> h
         _stochastic_prior_model: h -> (logits, z')
-        return:  (logits, z', h)
         
+        prior distribution: (logits, z', h)
+        input: (a_, z_, h_)
+        return:  (logits, z', h)
         """
         self.args = args
         self._stoch_size = args["stochastic_size"]
@@ -41,7 +43,6 @@ class RSSMTransition(nn.Module):
         if len(stoch_input.shape ) < 3:
             stoch_input = stoch_input.unsqueeze(-2)
         attn = self._attention_stack(stoch_input, mask=mask)
-
         deter_state = self._cell(attn.reshape(1, batch_size , -1),
                                  prev_states.deter.reshape(1, batch_size, -1))[0].reshape(batch_size, -1)
         logits, stoch_state = self._stochastic_prior_model(deter_state)
@@ -51,10 +52,12 @@ class RSSMRepresentation(nn.Module):
     def __init__(self, args, transition_model: RSSMTransition):
         super().__init__()
         """
-        _transition_model: (a_, z_) -> (logits, z', h)
+        _transition_model: (a_, z_, h_) -> (logits, z', h)
         _stochastic_posterior_model: (h, embed(o)) -> logits, z
-        posterior_states: (logits, z, h)
-        return (z', z)
+
+        posterior distribution: (logits, z, h)
+        input: (e(o), a_, z_, h_)
+        return: (z', z)
         """
         self.args = args
         self._transition_model = transition_model

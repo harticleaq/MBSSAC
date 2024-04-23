@@ -35,7 +35,7 @@ def main():
         help="Environment name.",
     )
     parser.add_argument(
-        "--exp_name", type=str, default="marl-based", help="Experiment name."
+        "--exp_name", type=str, default="MBSSAC", help="Experiment name."
     )
     parser.add_argument(
         "--load_config",

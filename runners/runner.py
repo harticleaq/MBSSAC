@@ -55,7 +55,6 @@ class Runner:
         self.max_action_shape = max([f.n for f in self.envs.action_space])
 
         # Instance models.
-
         self.agent = Agent(self.eval_envs, args, marl_args, env_args, world_model_args)
         self.buffer = OffPolicyBufferFP(
             {**marl_args["train"], **marl_args["model"], **marl_args["algo"]},
